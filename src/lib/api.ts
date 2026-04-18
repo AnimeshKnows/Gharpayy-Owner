@@ -2,12 +2,16 @@
 // All endpoints + payloads are documented in API_CONTRACT.md.
 
 import type {
+  ActionLog,
   ActionLogWithRoom,
+  BlockRequest,
   BlockRequestWithRoom,
   Property,
   Role,
   RoomWithProperty,
   User,
+  Visit,
+  Violation,
 } from "@/types/models";
 import { mockDb } from "./mockDb";
 
@@ -147,16 +151,71 @@ export const api = {
     );
   },
 
+  async ownerViolations(ownerId: string): Promise<Violation[]> {
+    if (USE_MOCK) {
+      throw new Error("Owner violations require VITE_API_URL (mock mode does not support this).");
+    }
+    return http<Violation[]>(`/api/owner/${ownerId}/violations`);
+  },
+
+  async ownerUpdateRoomStatus(
+    ownerId: string,
+    roomId: string,
+    body: { status: "vacant" | "vacating" | "occupied"; vacatingDate?: string },
+  ): Promise<RoomWithProperty> {
+    if (USE_MOCK) {
+      throw new Error("Room updates require VITE_API_URL (mock mode does not support this).");
+    }
+    return http<RoomWithProperty>(`/api/owner/${ownerId}/rooms/${roomId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  },
+
+  async ownerToggleDedicated(
+    ownerId: string,
+    roomId: string,
+    dedicated: boolean,
+  ): Promise<RoomWithProperty> {
+    if (USE_MOCK) {
+      throw new Error("Dedicated toggle requires VITE_API_URL (mock mode does not support this).");
+    }
+    return http<RoomWithProperty>(`/api/owner/${ownerId}/rooms/${roomId}/dedicated`, {
+      method: "PATCH",
+      body: JSON.stringify({ dedicated }),
+    });
+  },
+
+  async ownerRespondBlockRequest(
+    ownerId: string,
+    requestId: string,
+    body: { action: "approve" | "reject" },
+  ): Promise<{ blockRequest: BlockRequest; room: RoomWithProperty }> {
+    if (USE_MOCK) {
+      throw new Error("Block response requires VITE_API_URL (mock mode does not support this).");
+    }
+    return http<{ blockRequest: BlockRequest; room: RoomWithProperty }>(
+      `/api/owner/${ownerId}/block-requests/${requestId}/respond`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  },
+
   // --- Sales endpoints ---
-  // Returns rooms that pass the "no owner confirmation, no selling" rule:
-  // status must be "vacant" or "vacating".
+  // Mirrors backend: vacant/vacating, or reserved via dedicated/approved path;
+  // location on property.location; sort dedicated > approved block > rest, then name/room.
   async salesInventory(filters?: {
     location?: string;
     controlType?: "open" | "requested" | "dedicated";
   }): Promise<RoomWithProperty[]> {
     if (USE_MOCK) {
       let list = mockDb.rooms
-        .filter((r) => r.status === "vacant" || r.status === "vacating")
+        .filter((r) => {
+          const vacantish = r.status === "vacant" || r.status === "vacating";
+          const reservedPipeline =
+            r.status === "reserved" &&
+            (r.controlType === "dedicated" || r.blockStatus === "approved");
+          return vacantish || reservedPipeline;
+        })
         .map(mockDb.joinRoom);
       if (filters?.location) {
         list = list.filter((r) =>
@@ -168,13 +227,20 @@ export const api = {
       if (filters?.controlType) {
         list = list.filter((r) => r.controlType === filters.controlType);
       }
-      // Priority stack: dedicated > approved blocks > fresh vacant
       const weight = (r: RoomWithProperty) => {
         if (r.controlType === "dedicated") return 0;
         if (r.blockStatus === "approved") return 1;
         return 2;
       };
-      list.sort((a, b) => weight(a) - weight(b));
+      list.sort((a, b) => {
+        const w = weight(a) - weight(b);
+        if (w !== 0) return w;
+        const byName = a.propertyName.localeCompare(b.propertyName, undefined, {
+          sensitivity: "base",
+        });
+        if (byName !== 0) return byName;
+        return a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true });
+      });
       return list;
     }
     const q = new URLSearchParams();
@@ -182,6 +248,63 @@ export const api = {
     if (filters?.controlType) q.set("controlType", filters.controlType);
     const qs = q.toString() ? `?${q.toString()}` : "";
     return http<RoomWithProperty[]>(`/api/sales/inventory${qs}`);
+  },
+
+  async salesCreateBlockRequest(body: {
+    roomId: string;
+    expiryHours?: number;
+  }): Promise<BlockRequest> {
+    if (USE_MOCK) {
+      throw new Error("Sales mutations require VITE_API_URL (mock mode does not support this).");
+    }
+    return http<BlockRequest>("/api/sales/block-requests", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  async salesCreateVisit(body: {
+    roomId: string;
+    customerName: string;
+    customerPhone?: string;
+    visitType: "virtual" | "physical";
+    scheduledTime: string;
+  }): Promise<Visit> {
+    if (USE_MOCK) {
+      throw new Error("Sales mutations require VITE_API_URL (mock mode does not support this).");
+    }
+    return http<Visit>("/api/sales/visits", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  async salesCreateActionLog(body: {
+    roomId: string;
+    actionType: "pitch" | "virtual_tour" | "visit_done" | "booking";
+    notes?: string;
+  }): Promise<{ actionLog: ActionLog; room?: RoomWithProperty }> {
+    if (USE_MOCK) {
+      throw new Error("Sales mutations require VITE_API_URL (mock mode does not support this).");
+    }
+    return http<{ actionLog: ActionLog; room?: RoomWithProperty }>("/api/sales/action-logs", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  /**
+   * Clears expired approved locks server-side. Call from cron or ops tooling only.
+   * TODO(WhatsApp): no customer messaging here — keep sweep separate from outbound notifications.
+   */
+  async sweepLocks(internalKey: string): Promise<{ updated: number }> {
+    if (USE_MOCK) {
+      throw new Error("sweepLocks requires VITE_API_URL and INTERNAL_SWEEP_KEY on the server.");
+    }
+    return http<{ updated: number }>("/api/system/sweep-locks", {
+      method: "POST",
+      headers: { "x-internal-key": internalKey },
+    });
   },
 };
 

@@ -49,9 +49,65 @@ Returns: `ActionLogWithRoom[]`, newest first, scoped to this owner's rooms.
 Require role `sales`.
 
 ### `GET /api/sales/inventory?location=<str>&controlType=<open|requested|dedicated>`
-Returns: `RoomWithProperty[]` containing **only** rooms with status
-`"vacant"` or `"vacating"` (the "no owner confirmation → no selling" rule).
-Sort priority: `dedicated` first, then `blockStatus = "approved"`, then the rest.
+Returns: `RoomWithProperty[]` for **sellable and pipeline-visible** inventory:
+
+- **Included:** `status` is `"vacant"` or `"vacating"`, **or** `status` is `"reserved"`
+  while `controlType` is `"dedicated"` **or** `blockStatus` is `"approved"` (rooms
+  that reached reserved only through the booking gate stay visible to sales).
+
+**Query filters**
+
+- `location` — case-insensitive substring match against `Property.location` (not
+  the joined display string alone).
+- `controlType` — when set, only rooms with that `Room.controlType`.
+
+**Sort order**
+
+1. Priority bucket: `controlType = "dedicated"` first, then `blockStatus = "approved"`
+   (and not already in the dedicated bucket), then all others.
+2. Within the same bucket: `property.name` ascending, then `roomNumber` ascending.
+
+### `POST /api/sales/block-requests`
+Body: `{ roomId: string, expiryHours?: number }` (default `6`)  
+Creates a pending `BlockRequest`, sets `room.blockStatus = "pending"`, sets
+`room.controlType = "requested"` when not already `dedicated`, and writes an
+`ActionLog` (`pitch` with notes). Returns the created `BlockRequest` wire shape.
+
+### `POST /api/sales/visits`
+Body: `{ roomId, customerName, customerPhone?, visitType: "virtual"|"physical", scheduledTime }`  
+Creates `Visit` and `ActionLog` (`visit_scheduled`). Returns `Visit`.
+
+### `POST /api/sales/action-logs`
+Body: `{ roomId, actionType: "pitch"|"virtual_tour"|"visit_done"|"booking", notes? }`  
+Creates `ActionLog`. For `booking`, enforces booking gate; on success sets
+`room.status = "reserved"` and returns `{ actionLog, room }`. Otherwise returns
+`{ actionLog }`.
+
+## Owner mutations (same auth as other owner routes)
+
+### `GET /api/owner/:ownerId/violations`
+Returns `Violation[]` for that owner (newest first, capped).
+
+### `PATCH /api/owner/:ownerId/rooms/:roomId/status`
+Body: `{ status: "vacant"|"vacating"|"occupied", vacatingDate?: ISO }`  
+Updates room; may append `Violation` on conflicting overrides. Returns
+`RoomWithProperty`.
+
+### `PATCH /api/owner/:ownerId/rooms/:roomId/dedicated`
+Body: `{ dedicated: boolean }`  
+Toggles dedicated control, syncs `Allocation` for the property, may log
+`Violation`. Returns `RoomWithProperty`.
+
+### `POST /api/owner/:ownerId/block-requests/:requestId/respond`
+Body: `{ action: "approve"|"reject" }`  
+Approves/rejects block; updates room lock / block fields per business rules.
+Returns `{ blockRequest, room }` (minimal wire shapes).
+
+## System
+
+### `POST /api/system/sweep-locks`
+Protected by header `x-internal-key` matching env `INTERNAL_SWEEP_KEY` (min 8
+chars). Clears expired approved locks on rooms. Returns `{ updated: number }`.
 
 ## Models
 
@@ -61,8 +117,9 @@ strings.
 
 ### Business rules to enforce server-side (not in frontend)
 
-1. **No owner confirmation → no selling.** Sales inventory only returns rooms
-   in `vacant` / `vacating` status.
+1. **No owner confirmation → no selling.** Sales inventory is primarily
+   `vacant` / `vacating`; a narrow `reserved` slice (dedicated or approved-block
+   path) is included for pipeline visibility. Other statuses are excluded.
 2. **Every visit tied to a room.** Reject `Visit` creation without a valid
    `room` reference.
 3. **Every action logged.** Creating a `Visit`, virtual tour, or pitch must
@@ -80,9 +137,9 @@ strings.
 
 ## Phase 1 scope (this frontend)
 
-Read-only owner + sales dashboards, JWT login, role guards, seeded mock data.
-Mutation endpoints (block requests, visits, pitches, approvals) are documented
-above for Phase 2 but not yet wired into the UI.
+JWT login, role guards, dashboards, and **mutations when `VITE_API_URL` points at
+this API**. The in-memory mock remains read-only for owner/sales writes unless
+extended later.
 
 ## Switching to your real backend
 

@@ -23,76 +23,86 @@ function Home() {
 
   useEffect(() => {
     if (loading || !user) return;
-    if (user.role === "owner") navigate({ to: "/owner/dashboard" });
-    else if (user.role === "sales") navigate({ to: "/sales/dashboard" });
+
+    if (user.role === "owner") {
+      navigate({ to: "/owner/dashboard" });
+    } else if (user.role === "sales") {
+      navigate({
+        to: "/sales/dashboard",
+        search: { location: undefined, controlType: undefined },
+      });
+    }
   }, [user, loading, navigate]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
-      <div className="w-full max-w-2xl">
-        <div className="mb-6 flex items-center gap-2">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">
+    <main className="min-h-screen bg-background text-foreground">
+      <section className="mx-auto flex min-h-screen max-w-6xl flex-col justify-center px-6 py-16">
+        <div className="max-w-3xl">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-xl font-semibold text-primary-foreground">
             G
-          </span>
-          <div className="leading-tight">
-            <p className="text-sm font-semibold tracking-tight">Gharpayy</p>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              Inventory OS
-            </p>
           </div>
+
+          <p className="text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground">
+            Gharpayy
+          </p>
+
+          <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">
+            Inventory OS
+          </h1>
+
+          <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground">
+            Owners <strong>fill beds without losing control</strong>. Sales{" "}
+            <strong>sell what&apos;s real, close faster</strong>.
+          </p>
         </div>
 
-        <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
-          One backend, two lenses.
-        </h1>
-        <p className="mt-3 max-w-xl text-sm text-muted-foreground">
-          Owners <em>fill beds without losing control</em>. Sales{" "}
-          <em>sell what&apos;s real, close faster</em>.
-        </p>
-
-        <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="mt-10 grid gap-6 md:grid-cols-2">
           <Link
             to="/owner/dashboard"
-            className="group rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary/40"
+            className="group rounded-3xl border border-border bg-surface p-6 transition hover:border-primary/40 hover:shadow-lg"
           >
-            <div className="flex items-center justify-between">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-secondary text-foreground">
-                <Building2 className="h-4 w-4" />
-              </span>
-              <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+            <div className="flex items-start justify-between">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <Building2 className="h-6 w-6" />
+              </div>
+              <ArrowRight className="h-5 w-5 text-muted-foreground transition group-hover:translate-x-1 group-hover:text-foreground" />
             </div>
-            <p className="mt-4 text-sm font-semibold">Owner dashboard</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Properties, rooms, pending block requests, effort feed.
+
+            <h2 className="mt-5 text-xl font-semibold">Owner dashboard</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Properties, rooms, pending block requests, effort feed, and room-level control.
             </p>
           </Link>
+
           <Link
             to="/sales/dashboard"
-            className="group rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary/40"
+            search={{ location: undefined, controlType: undefined }}
+            className="group rounded-3xl border border-border bg-surface p-6 transition hover:border-primary/40 hover:shadow-lg"
           >
-            <div className="flex items-center justify-between">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-secondary text-foreground">
-                <Headphones className="h-4 w-4" />
-              </span>
-              <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+            <div className="flex items-start justify-between">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <Headphones className="h-6 w-6" />
+              </div>
+              <ArrowRight className="h-5 w-5 text-muted-foreground transition group-hover:translate-x-1 group-hover:text-foreground" />
             </div>
-            <p className="mt-4 text-sm font-semibold">Sales dashboard</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Owner-confirmed inventory with priority stacking.
+
+            <h2 className="mt-5 text-xl font-semibold">Sales dashboard</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Owner-confirmed inventory with priority stacking and live room-level selling context.
             </p>
           </Link>
         </div>
 
         {!user && !loading && (
-          <p className="mt-8 text-xs text-muted-foreground">
+          <p className="mt-8 text-sm text-muted-foreground">
             Not signed in.{" "}
-            <Link to="/login" className="font-medium text-primary underline">
+            <Link to="/login" className="font-medium text-primary hover:underline">
               Go to login
             </Link>
             .
           </p>
         )}
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

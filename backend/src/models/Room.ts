@@ -9,6 +9,7 @@ export type RoomStatus =
 
 export type ControlType = "open" | "requested" | "dedicated";
 export type BlockStatus = "none" | "pending" | "approved" | "rejected";
+export type ConfirmedStatus = "vacant" | "vacating" | "occupied" | "no_change";
 
 export interface IRoom extends Document {
   property: Types.ObjectId;
@@ -22,6 +23,8 @@ export interface IRoom extends Document {
   blockStatus: BlockStatus;
   lockedUntil?: Date;
   vacatingDate?: Date;
+  lastConfirmedAt?: Date;
+  lastConfirmedStatus?: ConfirmedStatus;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -52,6 +55,11 @@ const roomSchema = new Schema<IRoom>(
     },
     lockedUntil: { type: Date },
     vacatingDate: { type: Date },
+    lastConfirmedAt: { type: Date },
+    lastConfirmedStatus: {
+      type: String,
+      enum: ["vacant", "vacating", "occupied", "no_change"],
+    },
   },
   { timestamps: true },
 );

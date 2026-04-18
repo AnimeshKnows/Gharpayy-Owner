@@ -73,9 +73,11 @@ export interface Visit {
   _id: string;
   room: string;
   customerName: string;
+  customerPhone?: string;
   visitType: "virtual" | "physical";
   scheduledTime: string;
   status: "scheduled" | "completed" | "cancelled" | "no_show";
+  createdBy: string;
 }
 
 export interface Allocation {
