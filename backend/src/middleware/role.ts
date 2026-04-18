@@ -9,7 +9,10 @@ export function requireRole(...allowed: Role[]) {
       return;
     }
     if (!allowed.includes(user.role)) {
-      res.status(403).json({ error: "Forbidden" });
+      res.status(403).json({
+        error: "Forbidden",
+        message: `This endpoint requires role: ${allowed.join(" or ")}. Your role is "${user.role}".`,
+      });
       return;
     }
     next();

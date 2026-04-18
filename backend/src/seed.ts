@@ -76,7 +76,7 @@ async function main(): Promise<void> {
       expectedRent: 8000,
       status: "vacant" as const,
       controlType: "dedicated" as const,
-      blockStatus: "none" as const,
+      blockStatus: "pending" as const,
     },
     {
       roomNumber: "102",
@@ -95,12 +95,15 @@ async function main(): Promise<void> {
       status: "vacant" as const,
       controlType: "requested" as const,
       blockStatus: "approved" as const,
+      lockedUntil: new Date(Date.now() + 6 * 60 * 60 * 1000),
     },
-  ];
+  ] as const;
 
   const rooms: Record<string, HydratedDocument<IRoom>> = {};
 
   for (const spec of roomSpecs) {
+    // Delete existing room so seed always refreshes state
+    await Room.deleteMany({ property: property._id, roomNumber: spec.roomNumber }).exec();
     let room = await Room.findOne({
       property: property._id,
       roomNumber: spec.roomNumber,
@@ -116,30 +119,38 @@ async function main(): Promise<void> {
         status: spec.status,
         controlType: spec.controlType,
         blockStatus: spec.blockStatus,
+        ...("lockedUntil" in spec && spec.lockedUntil ? { lockedUntil: spec.lockedUntil } : {}),
       });
     }
     rooms[spec.roomNumber] = room;
   }
 
   const room103 = rooms["103"];
+  const room101 = rooms["101"];
   const now = new Date();
   const expiry = new Date(now.getTime() + 6 * 60 * 60 * 1000);
 
-  const existingBlock = await BlockRequest.findOne({
+  // Clear old block requests for these rooms so seed is idempotent
+  await BlockRequest.deleteMany({ room: { $in: [room103._id, room101._id] } }).exec();
+
+  // Approved block request on room 103 (matches the approved blockStatus + lockedUntil)
+  await BlockRequest.create({
     room: room103._id,
     requestedBy: sales._id,
-  }).exec();
+    requestTime: now,
+    expiryTime: expiry,
+    status: "approved",
+    ownerResponseTime: now,
+  });
 
-  if (!existingBlock) {
-    await BlockRequest.create({
-      room: room103._id,
-      requestedBy: sales._id,
-      requestTime: now,
-      expiryTime: expiry,
-      status: "approved",
-      ownerResponseTime: now,
-    });
-  }
+  // Pending block request on room 101 — this is the one the owner approves during the demo
+  await BlockRequest.create({
+    room: room101._id,
+    requestedBy: sales._id,
+    requestTime: now,
+    expiryTime: expiry,
+    status: "pending",
+  });
 
   const logSpecs = [
     { roomKey: "101" as const, actionType: "pitch" as const },
